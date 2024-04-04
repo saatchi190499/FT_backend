@@ -27,7 +27,8 @@ urlpatterns = [
 
     path('export_scenario/', ExportScenario.as_view(), name='export_scenario'),
     path('run_scenario/', RunScenario.as_view(), name='run_scenario'),
-
+    path('test/', Test.as_view(), name='test'),
+    
     path('main_class/<str:select_events_set_id>/', CopyEventSet.as_view()),
     path('scenarios/<str:scenario_name>/', UpdateScenario.as_view(), name='update_scenario'),
 ]

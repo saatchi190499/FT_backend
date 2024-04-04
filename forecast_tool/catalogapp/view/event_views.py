@@ -73,6 +73,7 @@ class ListEventsSet(APIView):
 
 
 # Saving Events in EventSet to db
+
 class SaveEventSet(APIView):    
     def post(self, request):
         data = request.data
@@ -82,7 +83,7 @@ class SaveEventSet(APIView):
                 item["date_time"] = '30/12/1899'
             object_type_name = item.get("object_type")
             object_type_property_name = item.get("object_type_property")
-
+            
             try:
                 object_type = ObjectType.objects.get(object_type_name=object_type_name)
                 object_type_property = ObjectTypeProperty.objects.filter(object_type=object_type, object_type_property_name=object_type_property_name).first()
@@ -93,7 +94,6 @@ class SaveEventSet(APIView):
                 return Response(data={"error": f"Multiple ObjectTypeProperty objects returned for name '{object_type_property_name}'"}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = MainClassSerializer(data=data, many=True)
-       
         if serializer.is_valid():
             serializer.save()
             response_data = {
@@ -103,4 +103,3 @@ class SaveEventSet(APIView):
             return Response(data=response_data, status=status.HTTP_201_CREATED)
         else:
             return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-

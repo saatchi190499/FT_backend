@@ -55,7 +55,7 @@ class MainClassSerializer(serializers.ModelSerializer):
     object_type = serializers.SlugRelatedField(slug_field='object_type_name', queryset=ObjectType.objects.all())
     object_instance = serializers.SlugRelatedField(slug_field='object_instance_name', queryset=ObjectInstance.objects.all())
     # object_type_property = serializers.SlugRelatedField(slug_field='object_type_property_name', queryset=ObjectTypeProperty.objects.all())
-
+    description = serializers.CharField(required=False)
     class Meta:
         model = MainClass
         fields = ['data_source_type', 'data_source_id', 'object_type', 'object_instance', 'object_type_property', 'value', 'date_time','sub_data_source','description']
