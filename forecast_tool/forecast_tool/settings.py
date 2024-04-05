@@ -84,7 +84,7 @@ DATABASES={
       'ENGINE':'django.db.backends.postgresql_psycopg2',
       'NAME':'forecastTool',
       'USER':'postgres',
-      'PASSWORD':'213635',
+      'PASSWORD':'181006',
       'HOST':'localhost',
       'PORT':'5432',
    }

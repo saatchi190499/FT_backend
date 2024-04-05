@@ -1,2 +1,2 @@
-object_instance_name,value0,value1,value2,value3,value4,value5,value6,value7,value8,value9,value10,value11,value12,value13,value14,value15,value16,value17,value18,value19,value20,value21,value22,value23,value24,value25,value26,value27,value28
-9876,45509.00,1934.00,0.40,0.00,0.00,0.00,0.00,0.00,45509.00,361.00,0.40,0.00,0.00,0.00,0.00,0.00,44440.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00
+Well_name,GOR_Date,GOR_Initial,GOR_Slope,c6_gor,c5_gor,c4_gor,c3_gor,c2_gor,SBHP_Date,SBHP_Initial,SBHP_Slope,c6_sbhp,c5_sbhp,c4_sbhp,c3_sbhp,c2_sbhp,WCT_Date,WCT_Initial,WTC_Slope,WCT_SI_Criteria,WCT_Delay,PI_C_Date,c6_PI,c5_PI,c4_PI,c3_PI,c2_PI,c1_PI,c0_PI
+9876,45509.0,1934.0,0.4,0.0,0.0,0.0,0.0,0.0,45509.0,361.0,0.4,0.0,0.0,0.0,0.0,0.0,44440.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
