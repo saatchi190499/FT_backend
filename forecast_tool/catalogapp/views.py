@@ -180,21 +180,24 @@ class Test(APIView):
         'c6_sbhp', 'c5_sbhp', 'c4_sbhp', 'c3_sbhp', 'c2_sbhp',
         'WCT_Date', 'WCT_Initial', 'WTC_Slope',
         'WCT_SI_Criteria', 'WCT_Delay',
-        'PI_C_Date', 'c6_PI', 'c5_PI', 'c4_PI', 'c3_PI', 'c2_PI', 'c1_PI', 'c0_PI'
-    ]
-
+        'PI_C_Date', 'c6_PI', 'c5_PI', 'c4_PI', 'c3_PI', 'c2_PI', 'c1_PI', 'c0_PI']
     # Convert 'object_type_property' to categorical with desired order
     main_df['object_type_property'] = pd.Categorical(main_df['object_type_property'], categories=desired_order, ordered=False)
     # Pivot the DataFrame
     pivot_data = main_df.pivot_table(index='Well_name', columns='object_type_property', values='value')
-    # Reset the index to make 'object_instance_name' a regular column
-    pivot_data.reset_index(inplace=True)
-
-    print(pivot_data)
-
-   
+    # Create a DataFrame with all column values as "test" and "test" under "Well_name" column
+    test_row_values = ['test'] * (len(desired_order))  # One less column as the first one is 'Well_name'
+    test_row_values.insert(0, 'test')  # Insert 'test' as the first value
+    test_row_df = pd.DataFrame([test_row_values], columns=['Well_name'] + desired_order)  # Exclude the 'Well_name' from desired_order
+    
+    # Concatenate the test_row_df with pivot_data
+    pivot_data = pd.concat([test_row_df, pivot_data.reset_index()])
+    
     pivot_data.to_csv('formatted_file.csv', index=False)
 
+
+    print(pivot_data)
+    
 
 
 
