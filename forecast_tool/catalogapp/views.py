@@ -13,6 +13,7 @@ import os, csv, shutil
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 import pandas as pd
+from django.core.exceptions import ObjectDoesNotExist
 
 class ListScenarioStatusClass(APIView):
     http_method_names = ['get']
@@ -82,56 +83,146 @@ class UpdateScenario(APIView):
         serializer = ScenarioClassSerializer(scenario)
         return Response(serializer.data)
     
-
+    
 class ExportScenario(APIView):
     
     def get(self, request, *args, **kwargs):
-        # Экспорт CSV
+        # Retrieve the chosen scenario name from the request
         choose_scenario_name = request.GET.get('chooseScenario')
         scenario = ScenarioClass.objects.get(scenario_name=choose_scenario_name)
 
-        event_set_name = scenario.events_set_id
-        event = EventsClass.objects.get(events_set_name=event_set_name)
-        event_set_id = event.events_set_id
+        # Retrieve the scenario ID or another unique identifier from the scenario
+        scenario_id = scenario.scenario_id  # Assuming the ScenarioClass object has an `id` attribute
+
+        # Define the scenario-specific folder path
+        scenario_folder_name = f"Scenario_{scenario_id}"  # You can customize the folder name format as needed
+        scenario_folder_path = os.path.join('E:/ByteAllEnergy/Forecast', scenario_folder_name)
+
+        # Define the source paths of the CSV files
+        source_paths = ['TrendEvent/Event.csv', 'TrendEvent/Trend.csv']
+
+        # Define the destination paths within the scenario-specific folder
+        destination_paths = [
+            os.path.join(scenario_folder_path, 'Event.csv'),
+            os.path.join(scenario_folder_path, 'Trend.csv')
+        ]
+
+        # Create the scenario-specific folder if it does not already exist
+        os.makedirs(scenario_folder_path, exist_ok=True)
+
+        # Generate the event and trend CSV files
+        self.get_event(scenario)
+        self.get_trend(scenario)
+
+        # Move the files from source paths to destination paths
+        for source_path, destination_path in zip(source_paths, destination_paths):
+            # Move the file using shutil.move()
+            shutil.move(source_path, destination_path)
+            print(f"File successfully moved from {source_path} to {destination_path}")
+
+        print(f"All files for scenario '{scenario_id}' moved to {scenario_folder_path}")
+
+    def get_event(self, scenario):
+        try:
+            # Экспорт event CSV
+            event_set_name = scenario.events_set_id
+            event = EventsClass.objects.get(events_set_name=event_set_name)
+            event_set_id = event.events_set_id
+
+            main_data_event = MainClass.objects.filter(data_source_type=MainClass.EVENTS, data_source_id=event_set_id).values(
+            'date_time',
+            'object_type',
+            'object_instance',
+            'object_type_property',
+            'value',
+            'sub_data_source'
+            )
+
+            df_event = pd.DataFrame(list(main_data_event))
+            df_event.rename(columns={
+                'date_time': 'Date',
+                'object_type': 'Type',
+                'object_instance': 'Name',
+                'object_type_property': 'Action',
+                'value': 'Value',
+                'sub_data_source': 'Category'
+            }, inplace=True)
         
-        main_data_event = MainClass.objects.filter(data_source_type=MainClass.EVENTS, data_source_id=event_set_id)
-        print(main_data_event)
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename=Events1.csv'
+            csv_file_path = 'TrendEvent/Event.csv'  # Specify the path where you want to save the CSV file
+            df_event.to_csv(csv_file_path, index=False)
+            print(f"Data saved to {csv_file_path}.")
+               
+        except ObjectDoesNotExist as e:
+            print(f"Error: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+                
+    def get_trend(self, scenario):
+        try:
+            # Fetch trend based on scenario
+            trend_set_name = scenario.trends_set_id
+            trend = TrendsClass.objects.get(trends_set_name=trend_set_name)
+            trend_set_id = trend.trends_set_id
+    
+            # Fetch main data for trend
+            main_data_trend = MainClass.objects.filter(
+                data_source_type=MainClass.TRENDS,
+                data_source_id=trend_set_id
+            ).values('object_instance_id', 'value', 'object_type_property')
+    
+            # Convert data to a DataFrame
+            main_df = pd.DataFrame(list(main_data_trend))
+    
+            # Fetch object instance and property data for mapping
+            object_instance_data = ObjectInstance.objects.values('object_instance_id', 'object_instance_name')
+            object_type_property_data = ObjectTypeProperty.objects.values('object_type_property_id', 'object_type_property_name')
+    
+            # Convert object instance and property data to dictionaries for mapping
+            object_instance_dict = {obj['object_instance_id']: obj['object_instance_name'] for obj in object_instance_data}
+            object_property_dict = {obj['object_type_property_id']: obj['object_type_property_name'] for obj in object_type_property_data}
+    
+            # Map object_instance_id and object_type_property
+            main_df['object_instance_name'] = main_df['object_instance_id'].map(object_instance_dict)
+            main_df['object_type_property'] = main_df['object_type_property'].map(object_property_dict)
+            
+            # Rename column to 'Well_name'
+            main_df.rename(columns={'object_instance_name': 'Well_name'}, inplace=True)
+    
+            # Define desired order of columns
+            desired_order = [
+                'GOR_Date', 'GOR_Initial', 'GOR_Slope',
+                'c6_gor', 'c5_gor', 'c4_gor', 'c3_gor', 'c2_gor',
+                'SBHP_Date', 'SBHP_Initial', 'SBHP_Slope',
+                'c6_sbhp', 'c5_sbhp', 'c4_sbhp', 'c3_sbhp', 'c2_sbhp',
+                'WCT_Date', 'WCT_Initial', 'WTC_Slope',
+                'WCT_SI_Criteria', 'WCT_Delay',
+                'PI_C_Date', 'c6_PI', 'c5_PI', 'c4_PI', 'c3_PI', 'c2_PI', 'c1_PI', 'c0_PI'
+            ]
+    
+            # Convert 'object_type_property' to categorical with desired order
+            main_df['object_type_property'] = pd.Categorical(main_df['object_type_property'], categories=desired_order, ordered=True)
+    
+            # Pivot the DataFrame
+            pivot_data = main_df.pivot_table(index='Well_name', columns='object_type_property', values='value')
+    
+            # Create a DataFrame with all column values as "test" and "test" under "Well_name" column
+            test_row_values = ['test'] * len(desired_order)
+            test_row_values.insert(0, 'test')  # Add 'test' as the first value for 'Well_name'
+            test_row_df = pd.DataFrame([test_row_values], columns=['Well_name'] + desired_order)
+    
+            # Concatenate test row to pivot data
+            pivot_data = pd.concat([test_row_df, pivot_data.reset_index()], ignore_index=True)
+                               
+            # Save the DataFrame to a CSV file
+            csv_file_path = 'TrendEvent/Trend.csv'  # Specify the path for saving the CSV file
+            pivot_data.to_csv(csv_file_path, index=False)
+            print(f"Data saved to {csv_file_path}.")
+                
+        except ObjectDoesNotExist as e:
+            print(f"Error: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
-        writer = csv.writer(response)
-        writer.writerow(['Date', 'Type', 'Name', 'Action', 'Value', 'Category'])
-        writer.writerow(['test', 'test', 'test', 'test', 'test', 'test'])
-
-        for row in main_data_event:
-            five_digit_number = convert_date_to_five_digit_number(row.date_time)
-            writer.writerow([
-                five_digit_number,#row.date_time,
-                row.object_type,
-                row.object_instance,
-                row.object_type_property,
-                row.value,
-                row.sub_data_source
-            ])
-
-        source_path = 'C:/Users/user/Downloads/Events1.csv'#'D:/Users/dospaa/Downloads/Events1.csv' #D:\Users\dospaa\Downloads
-        destination_path = 'C:/Users/user/Documents/KPO/отчет/Report CallOff 4/Forecast/Events1.csv' #F:\ForecastTool\Resolve_29022024
-        
-
-        if os.path.exists(source_path):
-            os.remove(source_path)  
-        with open(source_path, 'wb') as file:
-            file.write(response.getvalue())
-        if os.path.exists(destination_path):
-            os.remove(destination_path)  
-
-        shutil.move(source_path, destination_path)  
-        print(f"Файл успешно перемещен из {source_path} в {destination_path}")
-
-        if os.path.exists(source_path):
-            os.remove(source_path)
-        return response
-        
 
 
 class RunScenario(APIView):
@@ -145,58 +236,73 @@ class RunScenario(APIView):
 
 
 class Test(APIView):
-    trend_set_name = 'вфысфысс'
-    trend = TrendsClass.objects.get(trends_set_name=trend_set_name)
-    trend_set_id = trend.trends_set_id
-    main_data_trend = MainClass.objects.filter(
-    data_source_type=MainClass.TRENDS, 
-    data_source_id=trend_set_id).values(
-    'object_instance_id',  # This will keep object_instance_id
-    'value',
-    'object_type_property'# Other fields you want to keep
-    )
+    pass
+   #trend_set_name = 'вфысфысс'
+   #trend = TrendsClass.objects.get(trends_set_name=trend_set_name)
+   #trend_set_id = trend.trends_set_id
+   #main_data_trend = MainClass.objects.filter(
+   #data_source_type=MainClass.TRENDS, 
+   #data_source_id=trend_set_id).values(
+   #'object_instance_id',  # This will keep object_instance_id
+   #'value',
+   #'object_type_property'# Other fields you want to keep
+   #)
+   #event_set_name = "test2"
+   #event = EventsClass.objects.get(events_set_name=event_set_name)
+   #event_set_id = event.events_set_id
+   #
+   #main_data_event = MainClass.objects.filter(data_source_type=MainClass.EVENTS, data_source_id=event_set_id).values(
+   #    'date_time',
+   #    'object_type',
+   #    'object_instance',
+   #    'object_type_property',
+   #    'value',
+   #    'sub_data_source'
+   #)
+   #print(main_data_event)
+   #df_event = pd.DataFrame(list(main_data_event))
+   #print(df_event)
+   ## Convert list of dictionaries into a DataFrame
+   #main_df = pd.DataFrame(list(main_data_trend))
+   #
+   ## Fetch object_instance_name separately
+   #object_instance_data = ObjectInstance.objects.values('object_instance_id', 'object_instance_name')
+   #object_type_property = ObjectTypeProperty.objects.values('object_type_property_id', 'object_type_property_name')
+   #
+   ## Convert object_instance_data into a dictionary for faster lookup
+   #object_instance_dict = {obj['object_instance_id']: obj['object_instance_name'] for obj in object_instance_data}
+   #object_property_dict = {obj['object_type_property_id']: obj['object_type_property_name'] for obj in object_type_property}
+   #
+   ## Replace object_instance_id with object_instance_name in main_df
+   #main_df['object_instance_name'] = main_df['object_instance_id'].map(object_instance_dict)
+   #main_df['object_type_property'] = main_df['object_type_property'].map(object_property_dict)
+   #print(main_df)
+   #main_df.rename(columns={'object_instance_name': 'Well_name'}, inplace=True)
+   ## Define the desired order of object_type_property values
+   #desired_order = [
+   #    'GOR_Date', 'GOR_Initial', 'GOR_Slope',
+   #    'c6_gor', 'c5_gor', 'c4_gor', 'c3_gor', 'c2_gor',
+   #    'SBHP_Date', 'SBHP_Initial', 'SBHP_Slope',
+   #    'c6_sbhp', 'c5_sbhp', 'c4_sbhp', 'c3_sbhp', 'c2_sbhp',
+   #    'WCT_Date', 'WCT_Initial', 'WTC_Slope',
+   #    'WCT_SI_Criteria', 'WCT_Delay',
+   #    'PI_C_Date', 'c6_PI', 'c5_PI', 'c4_PI', 'c3_PI', 'c2_PI', 'c1_PI', 'c0_PI']
+   ## Convert 'object_type_property' to categorical with desired order
+   #main_df['object_type_property'] = pd.Categorical(main_df['object_type_property'], categories=desired_order, ordered=False)
+   ## Pivot the DataFrame
+   #pivot_data = main_df.pivot_table(index='Well_name', columns='object_type_property', values='value')
+   ## Create a DataFrame with all column values as "test" and "test" under "Well_name" column
+   #test_row_values = ['test'] * (len(desired_order))  # One less column as the first one is 'Well_name'
+   #test_row_values.insert(0, 'test')  # Insert 'test' as the first value
+   #test_row_df = pd.DataFrame([test_row_values], columns=['Well_name'] + desired_order)  # Exclude the 'Well_name' from desired_order
+   #
+   ## Concatenate the test_row_df with pivot_data
+   #pivot_data = pd.concat([test_row_df, pivot_data.reset_index()])
+   #
+   #pivot_data.to_csv('formatted_file.csv', index=False)
 
-    # Convert list of dictionaries into a DataFrame
-    main_df = pd.DataFrame(list(main_data_trend))
-    
-    # Fetch object_instance_name separately
-    object_instance_data = ObjectInstance.objects.values('object_instance_id', 'object_instance_name')
-    object_type_property = ObjectTypeProperty.objects.values('object_type_property_id', 'object_type_property_name')
-    
-    # Convert object_instance_data into a dictionary for faster lookup
-    object_instance_dict = {obj['object_instance_id']: obj['object_instance_name'] for obj in object_instance_data}
-    object_property_dict = {obj['object_type_property_id']: obj['object_type_property_name'] for obj in object_type_property}
-    
-    # Replace object_instance_id with object_instance_name in main_df
-    main_df['object_instance_name'] = main_df['object_instance_id'].map(object_instance_dict)
-    main_df['object_type_property'] = main_df['object_type_property'].map(object_property_dict)
-    print(main_df)
-    main_df.rename(columns={'object_instance_name': 'Well_name'}, inplace=True)
-    # Define the desired order of object_type_property values
-    desired_order = [
-        'GOR_Date', 'GOR_Initial', 'GOR_Slope',
-        'c6_gor', 'c5_gor', 'c4_gor', 'c3_gor', 'c2_gor',
-        'SBHP_Date', 'SBHP_Initial', 'SBHP_Slope',
-        'c6_sbhp', 'c5_sbhp', 'c4_sbhp', 'c3_sbhp', 'c2_sbhp',
-        'WCT_Date', 'WCT_Initial', 'WTC_Slope',
-        'WCT_SI_Criteria', 'WCT_Delay',
-        'PI_C_Date', 'c6_PI', 'c5_PI', 'c4_PI', 'c3_PI', 'c2_PI', 'c1_PI', 'c0_PI']
-    # Convert 'object_type_property' to categorical with desired order
-    main_df['object_type_property'] = pd.Categorical(main_df['object_type_property'], categories=desired_order, ordered=False)
-    # Pivot the DataFrame
-    pivot_data = main_df.pivot_table(index='Well_name', columns='object_type_property', values='value')
-    # Create a DataFrame with all column values as "test" and "test" under "Well_name" column
-    test_row_values = ['test'] * (len(desired_order))  # One less column as the first one is 'Well_name'
-    test_row_values.insert(0, 'test')  # Insert 'test' as the first value
-    test_row_df = pd.DataFrame([test_row_values], columns=['Well_name'] + desired_order)  # Exclude the 'Well_name' from desired_order
-    
-    # Concatenate the test_row_df with pivot_data
-    pivot_data = pd.concat([test_row_df, pivot_data.reset_index()])
-    
-    pivot_data.to_csv('formatted_file.csv', index=False)
 
-
-    print(pivot_data)
+   #print(pivot_data)
     
 
 
